@@ -31,12 +31,12 @@ class PidFileAlreadyLockedError(PidFileError):
 
 class PidFile(object):
     __slots__ = ("pid", "pidname", "piddir", "enforce_dotpid_postfix", "register_term_signal_handler",
-                 "filename", "fh", "lock_pidfile", "chmod", "uid",
-                 "gid", "force_tmpdir", "lazy", "_logger")
+                 "filename", "fh", "lock_pidfile", "chmod", "uid", "gid", "force_tmpdir",
+                 "_logger", "_is_setup")
 
     def __init__(self, pidname=None, piddir=None, enforce_dotpid_postfix=True,
                  register_term_signal_handler=True, lock_pidfile=True, chmod=0o644,
-                 uid=-1, gid=-1, force_tmpdir=False, lazy=True):
+                 uid=-1, gid=-1, force_tmpdir=False):
         self.pidname = pidname
         self.piddir = piddir
         self.enforce_dotpid_postfix = enforce_dotpid_postfix
@@ -46,16 +46,13 @@ class PidFile(object):
         self.uid = uid
         self.gid = gid
         self.force_tmpdir = force_tmpdir
-        self.lazy = lazy
 
         self.fh = None
         self.filename = None
         self.pid = None
 
         self._logger = None
-
-        if not self.lazy:
-            self._setup()
+        self._is_setup = False
 
     @property
     def logger(self):
@@ -65,14 +62,15 @@ class PidFile(object):
         return self._logger
 
     def _setup(self):
-        self.logger.debug("%r entering setup", self)
-        if self.filename is None:
-            self.pid = os.getpid()
-            self.filename = self._make_filename()
-            self._register_term_signal()
+        if not self._is_setup:
+            self.logger.debug("%r entering setup", self)
+            if self.filename is None:
+                self.pid = os.getpid()
+                self.filename = self._make_filename()
+                self._register_term_signal()
 
-        # setup should only be performed once
-        self.lazy = False
+            # setup should only be performed once
+            self._is_setup = True
 
     def _make_filename(self):
         pidname = self.pidname
@@ -129,8 +127,7 @@ class PidFile(object):
             self.close(fh=fh, cleanup=False)
             raise PidFileAlreadyRunningError("Program already running with pid: %d" % pid)
 
-        if self.lazy:
-            self._setup()
+        self._setup()
 
         self.logger.debug("%r check pidfile: %s", self, self.filename)
 
@@ -142,8 +139,7 @@ class PidFile(object):
             inner_check(self.fh)
 
     def create(self):
-        if self.lazy:
-            self._setup()
+        self._setup()
 
         self.logger.debug("%r create pidfile: %s", self, self.filename)
         self.fh = open(self.filename, 'a+')
