@@ -78,35 +78,38 @@ def test_pid_custom_dir():
         pass
 
 
-def test_pid_no_term_signal():
-    def _noop(*args, **kwargs):
-        pass
+def test_pid_default_term_signal():
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    signal.signal(signal.SIGTERM, _noop)
-    with pid.PidFile(register_term_signal_handler=False):
-        assert signal.getsignal(signal.SIGTERM) is _noop
+    with pid.PidFile():
+        assert callable(signal.getsignal(signal.SIGTERM)) is True
 
 
-def test_pid_term_signal():
-    def _noop(*args, **kwargs):
-        pass
+def test_pid_ignore_term_signal():
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-    signal.signal(signal.SIGTERM, _noop)
-    with pid.PidFile(register_term_signal_handler=True):
-        assert signal.getsignal(signal.SIGTERM) is not _noop
+    with pid.PidFile():
+        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
 
 
 def test_pid_custom_term_signal():
     def _noop(*args, **kwargs):
         pass
 
-    def _custom_signal_func(*args, **kwargs):
-        pass
+    signal.signal(signal.SIGTERM, _noop)
 
-    signal.signal(signal.SIGTERM, _custom_signal_func)
-    assert signal.getsignal(signal.SIGTERM) is _custom_signal_func
-    with pid.PidFile(register_term_signal_handler=True):
-        assert signal.getsignal(signal.SIGTERM) is not _custom_signal_func
+    with pid.PidFile():
+        assert signal.getsignal(signal.SIGTERM) == _noop
+
+
+def test_pid_unknown_term_signal(mock_getsignal):
+    # Not sure how to properly test this when signal.getsignal returns None
+    # (mocking doesn't really make sense)
+    #
+    # with pid.PidFile():
+    #     assert signal.getsignal(signal.SIGTERM) == None
+
+    pass
 
 
 def test_pid_chmod():

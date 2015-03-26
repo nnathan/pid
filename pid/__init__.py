@@ -30,17 +30,20 @@ class PidFileAlreadyLockedError(PidFileError):
 
 
 class PidFile(object):
-    __slots__ = ("pid", "pidname", "piddir", "enforce_dotpid_postfix", "register_term_signal_handler",
+    __slots__ = ("pid", "pidname", "piddir", "enforce_dotpid_postfix",
                  "filename", "fh", "lock_pidfile", "chmod", "uid", "gid", "force_tmpdir",
                  "_logger", "_is_setup")
 
     def __init__(self, pidname=None, piddir=None, enforce_dotpid_postfix=True,
-                 register_term_signal_handler=True, lock_pidfile=True, chmod=0o644,
+                 lock_pidfile=True, chmod=0o644,
                  uid=-1, gid=-1, force_tmpdir=False):
+        # the following can be optionally supplied and are only used to generate
+        # the pid file by _make_filename() during the _setup() phase, and are no
+        # longer of importance.
         self.pidname = pidname
         self.piddir = piddir
         self.enforce_dotpid_postfix = enforce_dotpid_postfix
-        self.register_term_signal_handler = register_term_signal_handler
+
         self.lock_pidfile = lock_pidfile
         self.chmod = chmod
         self.uid = uid
@@ -96,12 +99,26 @@ class PidFile(object):
         return filename
 
     def _register_term_signal(self):
-        if self.register_term_signal_handler:
-            # Register TERM signal handler to make sure atexit runs on TERM signal
+        # Register TERM signal handler to make sure atexit runs on TERM signal
 
-            def sigterm_noop_handler(*args, **kwargs):
-                raise SystemExit(1)
+        def sigterm_noop_handler(*args, **kwargs):
+            raise SystemExit(1)
 
+        # signal.getsignal returns:
+        #     (1) SIG_IGN -- if the signal is being ignored
+        #     (2) SIG_DFL -- if the default action for the signal is in effect
+        #     (3) None -- if an unknown handler is in effect
+        #     (4) anything else -- the callable Python object used as a handler
+        #
+        # Both (1) and (4) the caller should be aware of as TERM handler
+        # was explicitly set beforehand.
+        #
+        # (3) is a dubious case and we equate it with cases (1) and (4).
+        #
+        # The only case we should be concerned about is (2) because TERM
+        # is unhandled and atexit() isn't called.
+
+        if signal.getsignal(signal.SIGTERM) == signal.SIG_DFL:
             signal.signal(signal.SIGTERM, sigterm_noop_handler)
 
     def check(self):
